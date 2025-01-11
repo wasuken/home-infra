@@ -1,0 +1,4 @@
+---
+script_install_path: /usr/local/lib/system-scripts
+update_check_hour: "9"
+update_check_minute: "0"

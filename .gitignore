@@ -1,0 +1,11 @@
+# シークレット
+group_vars/all.yml
+host_vars/
+
+inventories/*.ini
+
+# その他
+*.retry
+*.pyc
+__pycache__/
+.ansible/

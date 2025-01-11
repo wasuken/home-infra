@@ -1,0 +1,45 @@
+#!/bin/bash
+
+WEBHOOK_URL="{{ discord_webhook_url }}"
+HOSTNAME=$(cat /etc/hostname)
+
+if [ -f /etc/os-release ]; then
+	. /etc/os-release
+	OS=$ID
+else
+	OS="unknown"
+fi
+
+check_updates() {
+	case $OS in
+	"arch")
+		updates=$(checkupdates | wc -l)
+		;;
+	"raspbian" | "debian" | "ubuntu")
+		apt-get update >/dev/null 2>&1
+		updates=$(apt-get -s upgrade | grep -P '^\d+ upgraded' | cut -d" " -f1)
+		;;
+	*)
+		echo "Unsupported OS: $OS"
+		exit 1
+		;;
+	esac
+	echo $updates
+}
+
+updates=$(check_updates)
+
+if [ "$updates" -gt 0 ]; then
+	message=":package: **${HOSTNAME}** ($OS) に $updates 件の更新があります"
+
+	if [ "$OS" = "arch" ] && command -v yay >/dev/null; then
+		aur_updates=$(yay -Qua | wc -l)
+		if [ "$aur_updates" -gt 0 ]; then
+			message="$message\n:wrench: AURパッケージの更新が $aur_updates 件あります"
+		fi
+	fi
+
+	curl -H "Content-Type: application/json" \
+		-d "{\"content\": \"$message\"}" \
+		"$WEBHOOK_URL"
+fi

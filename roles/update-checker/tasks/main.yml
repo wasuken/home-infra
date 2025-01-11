@@ -1,0 +1,57 @@
+---
+- name: Install required packages for Arch Linux
+  pacman:
+    name: 
+      - pacman-contrib
+      - curl
+    state: present
+  when: ansible_distribution == "Archlinux"
+
+- name: Install required packages for Debian/Raspbian
+  apt:
+    name: curl
+    state: present
+    update_cache: yes
+  when: ansible_distribution == "Debian" or ansible_distribution == "Ubuntu"
+
+- name: Check if crontab exists
+  stat:
+    path: /usr/bin/crontab
+  register: crontab_binary
+
+- name: Remove existing cron job if exists
+  cron:
+    name: "Check system updates"
+    state: absent
+  when: crontab_binary.stat.exists
+
+- name: Create update checker script directory
+  file:
+    path: /usr/local/lib/system-scripts
+    state: directory
+    mode: '0755'
+
+- name: Deploy update checker script
+  template:
+    src: update-checker.sh.j2
+    dest: /usr/local/lib/system-scripts/update-checker.sh
+    mode: '0755'
+
+- name: Create systemd service file
+  template:
+    src: update-checker.service.j2
+    dest: /etc/systemd/system/update-checker.service
+    mode: '0644'
+
+- name: Create systemd timer file
+  template:
+    src: update-checker.timer.j2
+    dest: /etc/systemd/system/update-checker.timer
+    mode: '0644'
+
+- name: Start and enable update checker timer
+  systemd:
+    name: update-checker.timer
+    state: started
+    enabled: yes
+    daemon_reload: yes

@@ -1,0 +1,12 @@
+[Unit]
+Description=Check system updates
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/system-scripts/update-checker.sh
+User=root
+
+[Install]
+WantedBy=multi-user.target
