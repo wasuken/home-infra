@@ -10,6 +10,7 @@ else
 	OS="unknown"
 fi
 
+# update-checker.sh.j2の該当部分
 check_updates() {
 	case $OS in
 	"arch")
@@ -18,6 +19,9 @@ check_updates() {
 	"raspbian" | "debian" | "ubuntu")
 		apt-get update >/dev/null 2>&1
 		updates=$(apt-get -s upgrade | grep -P '^\d+ upgraded' | cut -d" " -f1)
+		;;
+	"almalinux")
+		updates=$(dnf check-update --quiet | grep -v "^$" | wc -l)
 		;;
 	*)
 		echo "Unsupported OS: $OS"
