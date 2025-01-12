@@ -1,0 +1,9 @@
+---
+- name: Setup system monitors
+  hosts: all
+  become: true
+  vars_files:
+    - "{{ playbook_dir }}/../group_vars/all.yml"
+  roles:
+    - update-checker
+

@@ -1,0 +1,6 @@
+# roles/netdata/handlers/main.yml
+---
+- name: restart netdata
+  systemd:
+    name: netdata
+    state: restarted

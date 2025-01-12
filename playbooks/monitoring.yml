@@ -1,0 +1,17 @@
+---
+- name: Setup monitoring server
+  hosts: monitoring
+  become: true
+  vars:
+    netdata_mode: "parent"
+  roles:
+    - netdata
+
+- name: Setup monitored servers
+  hosts: servers:!monitoring
+  become: true
+  vars:
+    netdata_mode: "child"
+    netdata_parent_host: "fox"
+  roles:
+    - netdata

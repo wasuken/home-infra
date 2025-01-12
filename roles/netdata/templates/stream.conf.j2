@@ -1,0 +1,15 @@
+{% if netdata_mode == "parent" %}
+[{{ netdata_api_key }}]
+    enabled = yes
+    default history = 3600
+    default memory mode = ram
+    health enabled by default = auto
+    allow from = *
+{% endif %}
+
+{% if netdata_mode == "child" %}
+[stream]
+    enabled = yes
+    destination = {{ netdata_parent_host }}:19999
+    api key = {{ netdata_api_key }}
+{% endif %}

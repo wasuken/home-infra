@@ -1,0 +1,6 @@
+# roles/netdata/defaults/main.yml
+---
+netdata_mode: "standalone"
+netdata_parent_host: "fox"
+netdata_api_key: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+netdata_allowed_ips: "127.0.0.1 192.168.* *"

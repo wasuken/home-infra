@@ -1,0 +1,18 @@
+[global]
+    hostname = {{ ansible_hostname }}
+    history = 3996
+    update every = 1
+
+[web]
+    web files owner = root
+    web files group = netdata
+    allow connections from = {{ netdata_allowed_ips }}
+
+[health]
+    enabled = yes
+    run at least every seconds = 10
+
+{% if netdata_mode == "parent" %}
+[api]
+    allow from = *
+{% endif %}

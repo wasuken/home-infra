@@ -1,0 +1,64 @@
+---
+- name: Install required dependencies for Arch Linux
+  community.general.pacman:
+    name:
+      - netdata
+    state: present
+  when: ansible_distribution == "Archlinux"
+
+- name: Install required dependencies for Debian/Raspbian
+  apt:
+    name:
+      - netdata
+    state: present
+    update_cache: yes
+  when: ansible_distribution == "Debian" or ansible_distribution == "Ubuntu"
+
+- name: Install EPEL repository for AlmaLinux
+  dnf:
+    name: epel-release
+    state: present
+  when: ansible_distribution == "AlmaLinux"
+
+- name: Install netdata for AlmaLinux
+  dnf:
+    name: netdata
+    state: present
+  when: ansible_distribution == "AlmaLinux"
+
+- name: Configure netdata
+  template:
+    src: netdata.conf.j2
+    dest: /etc/netdata/netdata.conf
+    mode: '0644'
+  notify: restart netdata
+
+- name: Start and enable netdata service
+  systemd:
+    name: netdata
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Configure base netdata
+  template:
+    src: netdata.conf.j2
+    dest: /etc/netdata/netdata.conf
+    mode: '0644'
+  notify: restart netdata
+
+- name: Configure streaming (parent)
+  template:
+    src: stream.conf.j2
+    dest: /etc/netdata/stream.conf
+    mode: '0644'
+  when: netdata_mode == "parent"
+  notify: restart netdata
+
+- name: Configure streaming (child)
+  template:
+    src: stream.conf.j2
+    dest: /etc/netdata/stream.conf
+    mode: '0644'
+  when: netdata_mode == "child"
+  notify: restart netdata
