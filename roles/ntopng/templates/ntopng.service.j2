@@ -1,0 +1,11 @@
+[Unit]
+Description=ntopng high-speed web-based traffic monitoring and analysis tool
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ntopng --redis-host localhost
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

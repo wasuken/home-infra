@@ -1,0 +1,83 @@
+---
+- name: Install ntopng for Arch Linux
+  community.general.pacman:
+    name:
+      - ntopng
+    state: present
+  when: ansible_distribution == "Archlinux"
+
+- name: Install dependencies for Debian/Raspbian
+  apt:
+    name:
+      - software-properties-common
+      - wget
+      - gnupg
+    state: present
+  when: ansible_distribution == "Debian" or ansible_distribution == "Ubuntu"
+
+- name: Download apt-ntop package for Raspberry Pi
+  get_url:
+    url: http://packages.ntop.org/RaspberryPI/apt-ntop.deb
+    dest: /tmp/apt-ntop.deb
+  when: ansible_distribution == "Debian" or ansible_distribution == "Ubuntu"
+
+- name: Add ntop GPG key for Debian/Raspbian
+  apt_key:
+    url: http://packages.ntop.org/apt/ntop.key
+    state: present
+  when: ansible_distribution == "Debian" or ansible_distribution == "Ubuntu"
+
+- name: Install apt-ntop package
+  apt:
+    deb: /tmp/apt-ntop.deb
+  when: ansible_distribution == "Debian" or ansible_distribution == "Ubuntu"
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+  when: ansible_distribution == "Debian" or ansible_distribution == "Ubuntu"
+
+- name: Install ntopng
+  apt:
+    name: ntopng
+    state: present
+  when: ansible_distribution == "Debian" or ansible_distribution == "Ubuntu"
+
+- name: Install EPEL repository for AlmaLinux
+  dnf:
+    name: epel-release
+    state: present
+  when: ansible_distribution == "AlmaLinux"
+
+- name: Install ntopng for AlmaLinux
+  dnf:
+    name: ntopng
+    state: present
+  when: ansible_distribution == "AlmaLinux"
+
+- name: Create ntopng config directory
+  file:
+    path: /etc/ntopng
+    state: directory
+    mode: '0755'
+
+- name: Configure ntopng
+  template:
+    src: ntopng.conf.j2
+    dest: /etc/ntopng/ntopng.conf
+    mode: '0644'
+  notify: restart ntopng
+
+- name: Create systemd service file for ntopng
+  template:
+    src: ntopng.service.j2
+    dest: /etc/systemd/system/ntopng.service
+    mode: '0644'
+  notify: restart ntopng
+
+- name: Start and enable ntopng service
+  systemd:
+    name: ntopng
+    state: started
+    enabled: yes
+    daemon_reload: yes

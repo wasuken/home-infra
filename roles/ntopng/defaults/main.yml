@@ -1,0 +1,4 @@
+---
+ntopng_interface: "eth0"
+ntopng_local_networks: "192.168.0.0/16"
+ntopng_dns_mode: "1"

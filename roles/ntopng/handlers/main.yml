@@ -1,0 +1,5 @@
+---
+- name: restart ntopng
+  systemd:
+    name: ntopng
+    state: restarted

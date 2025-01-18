@@ -1,0 +1,7 @@
+# playbooks/ntop.yml
+---
+- name: Setup ntopng monitoring
+  hosts: ntop_servers
+  become: true
+  roles:
+    - ntopng

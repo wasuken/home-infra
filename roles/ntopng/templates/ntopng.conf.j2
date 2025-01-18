@@ -1,0 +1,7 @@
+-i={{ ntopng_interface | default('eth0') }}
+-w=3000
+--local-networks="{{ ntopng_local_networks | default('192.168.0.0/16') }}"
+--dns-mode={{ ntopng_dns_mode | default('1') }}
+{% if ntopng_redis_host is defined %}
+--redis={{ ntopng_redis_host }}
+{% endif %}
