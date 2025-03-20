@@ -1,0 +1,78 @@
+# iptablesルール設定
+*filter
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+
+# 確立済み接続を許可
+-A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+# ループバックインターフェースを許可
+-A INPUT -i lo -j ACCEPT
+
+# ICMPを許可
+-A INPUT -p icmp -j ACCEPT
+
+# SSHを許可（管理用）
+-A INPUT -p tcp --dport 22 -j ACCEPT
+
+# DHCPを許可
+-A INPUT -i {{ internal_interface }} -p udp --dport 67:68 -j ACCEPT
+-A INPUT -i {{ local_wifi_interface }} -p udp --dport 67:68 -j ACCEPT
+
+# DNSを許可
+-A INPUT -i {{ internal_interface }} -p udp --dport 53 -j ACCEPT
+-A INPUT -i {{ local_wifi_interface }} -p udp --dport 53 -j ACCEPT
+-A INPUT -i {{ internal_interface }} -p tcp --dport 53 -j ACCEPT
+-A INPUT -i {{ local_wifi_interface }} -p tcp --dport 53 -j ACCEPT
+
+# VRRP通信を許可
+-A INPUT -p vrrp -j ACCEPT
+
+# WireGuardを許可
+{% if wireguard_enabled %}
+-A INPUT -p udp --dport 51820 -j ACCEPT
+{% endif %}
+
+# フォワーディングルール
+-A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+# 内部ネットワークからのフォワーディングを許可
+-A FORWARD -i {{ internal_interface }} -o {{ upstream_wifi_interface }} -j ACCEPT
+-A FORWARD -i {{ local_wifi_interface }} -o {{ upstream_wifi_interface }} -j ACCEPT
+
+# WireGuardインターフェースからのフォワーディングを許可
+{% if wireguard_enabled %}
+-A FORWARD -i wg0 -j ACCEPT
+-A FORWARD -o wg0 -j ACCEPT
+{% endif %}
+
+COMMIT
+
+*nat
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+
+# 内部ネットワークからのNAT
+-A POSTROUTING -o {{ upstream_wifi_interface }} -j MASQUERADE
+{% if wireguard_enabled %}
+-A POSTROUTING -o wg0 -j MASQUERADE
+{% endif %}
+
+COMMIT
+
+*mangle
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+
+# WireGuardトラフィックにマークを設定
+{% if wireguard_enabled %}
+-A OUTPUT -p udp --dport 51820 -j MARK --set-mark 200
+{% endif %}
+
+COMMIT

@@ -1,0 +1,9 @@
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+country={{ wifi_country_code }}
+
+network={
+    ssid="{{ upstream_wifi_ssid }}"
+    psk="{{ upstream_wifi_password }}"
+    key_mgmt=WPA-PSK
+}

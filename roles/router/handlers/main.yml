@@ -1,0 +1,33 @@
+---
+- name: Restart networking
+  service:
+    name: networking
+    state: restarted
+
+- name: Restart hostapd
+  service:
+    name: hostapd
+    state: restarted
+    enabled: yes
+
+- name: Restart dnsmasq
+  service:
+    name: dnsmasq
+    state: restarted
+    enabled: yes
+
+- name: Restart keepalived
+  service:
+    name: keepalived
+    state: restarted
+    enabled: yes
+
+- name: Restart WireGuard
+  service:
+    name: wg-quick@wg0
+    state: restarted
+    enabled: yes
+  when: wireguard_enabled
+
+- name: Apply iptables rules
+  shell: iptables-restore < /etc/iptables/rules.v4

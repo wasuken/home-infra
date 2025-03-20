@@ -1,0 +1,44 @@
+#!/bin/bash
+# DHCPイベント処理スクリプト
+# dnsmasqからdhcp-scriptオプションで呼び出される
+
+# 引数の取得
+ACTION=$1      # add, del, old, arp-add, arp-del
+MAC=$2         # クライアントのMACアドレス
+IP=$3          # クライアントのIPアドレス
+HOSTNAME=$4    # クライアントのホスト名
+
+# アクティブルータかチェック
+ACTIVE=0
+if ip addr show {{ internal_interface }} | grep -q "{{ virtual_ip }}"; then
+    ACTIVE=1
+fi
+
+# ログ記録
+logger -t dhcp-event "$ACTION: $HOSTNAME ($MAC) at $IP"
+
+# 複数ルータ構成かつアクティブルータの場合、イベントを記録して同期
+if [ $ACTIVE -eq 1 ] && [ {{ groups['routers'] | length }} -gt 1 ]; then
+    # イベントを記録
+    echo "$(date +%s) $ACTION $MAC $IP $HOSTNAME" >> /var/lib/misc/dhcp-events.log
+    
+    # ログファイルが大きくなりすぎないよう制限
+    tail -n 1000 /var/lib/misc/dhcp-events.log > /var/lib/misc/dhcp-events.log.new
+    mv /var/lib/misc/dhcp-events.log.new /var/lib/misc/dhcp-events.log
+    
+    # バックアップルータへイベントを同期
+    for host in {{ groups['routers'] | join(' ') }}; do
+        # 自分自身はスキップ
+        if [ "$host" = "{{ inventory_hostname }}" ]; then
+            continue
+        fi
+        
+        # イベントログとリースファイルを同期（バックグラウンドで実行）
+        (
+            rsync -az /var/lib/misc/dhcp-events.log $host:/var/lib/misc/dhcp-events.log
+            rsync -az /var/lib/misc/dnsmasq.leases $host:/var/lib/misc/dnsmasq.leases
+        ) &
+    done
+fi
+
+exit 0

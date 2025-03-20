@@ -1,0 +1,48 @@
+#!/bin/bash
+# 上流ルータへの接続とルーティング設定
+
+# 上流ルータのIPアドレス
+UPSTREAM_ROUTER="{{ upstream_router_ip }}"
+UPSTREAM_IF="{{ upstream_wifi_interface }}"
+INT_IF="{{ internal_interface }}"
+LOCAL_WIFI_IF="{{ local_wifi_interface }}"
+
+# 上流ルータへの接続をチェック
+ping -c 1 -W 2 $UPSTREAM_ROUTER > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    logger -t router-setup "警告: 上流ルータ($UPSTREAM_ROUTER)に接続できません"
+    
+    # WiFi接続を再確立してみる
+    ifdown $UPSTREAM_IF
+    sleep 2
+    ifup $UPSTREAM_IF
+    
+    # 再試行
+    sleep 5
+    ping -c 1 -W 2 $UPSTREAM_ROUTER > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        logger -t router-setup "エラー: 上流ルータへの再接続に失敗しました"
+        exit 1
+    fi
+fi
+
+# デフォルトルートを設定
+ip route add default via $UPSTREAM_ROUTER dev $UPSTREAM_IF metric 100
+
+# WireGuardが有効な場合の設定
+if [ "{{ wireguard_enabled }}" = "true" ] && ip a | grep -q wg0; then
+    # 選択的ルーティング
+    ip route add default dev wg0 table 200
+    ip rule add fwmark 200 table 200
+fi
+
+# NATの設定
+iptables -t nat -A POSTROUTING -o $UPSTREAM_IF -j MASQUERADE
+
+# 内部ネットワークから上流ルータへの直接アクセスを許可
+iptables -A FORWARD -i $INT_IF -o $UPSTREAM_IF -j ACCEPT
+iptables -A FORWARD -i $LOCAL_WIFI_IF -o $UPSTREAM_IF -j ACCEPT
+
+logger -t router-setup "上流ルータへの接続とルーティング設定を完了しました"
+
+exit 0

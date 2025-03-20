@@ -1,0 +1,73 @@
+#!/bin/bash
+# サービス監視スクリプト
+
+LOG="/var/log/router-monitor.log"
+ACTIVE=0
+
+# VIPが自分にあるか確認
+if ip addr show {{ internal_interface }} | grep -q "{{ virtual_ip }}"; then
+	ACTIVE=1
+	echo "$(date): This router is ACTIVE" >>$LOG
+else
+	echo "$(date): This router is BACKUP" >>$LOG
+fi
+
+{% if 'routers' in groups and inventory_hostname in groups['routers'] %}
+ACTIVE=1
+{% endif %}
+
+# アクティブルータのみサービスチェック実行
+if [ $ACTIVE -eq 1 ]; then
+	# hostapd確認
+	if ! pgrep hostapd >/dev/null; then
+		echo "$(date): hostapd is DOWN, restarting" >>$LOG
+		systemctl restart hostapd
+	fi
+
+	# dnsmasq確認
+	if ! pgrep dnsmasq >/dev/null; then
+		echo "$(date): dnsmasq is DOWN, restarting" >>$LOG
+		systemctl restart dnsmasq
+	fi
+
+	# 上流ルータとの接続確認
+	if ! ping -c 1 -W 2 {{ upstream_router_ip }} >/dev/null 2>&1; then
+		echo "$(date): WARNING - 上流ルータに接続できません" >>$LOG
+
+		# WiFi接続を確認
+		WIFI_STATE=$(iwconfig {{ upstream_wifi_interface }} | grep -c "ESSID:\"{{ upstream_wifi_ssid }}\"")
+		if [ $WIFI_STATE -eq 0 ]; then
+			echo "$(date): WiFi接続が切断されています。再接続を試みます" >>$LOG
+			ifdown {{ upstream_wifi_interface }}
+			sleep 2
+			ifup {{ upstream_wifi_interface }}
+		fi
+
+		# 接続問題が検出された場合、再接続を試みる
+		sleep 5
+		/usr/local/bin/setup_upstream_routing.sh
+	fi
+
+	# インターネット接続確認
+	if ! ping -c 1 -W 5 8.8.8.8 >/dev/null 2>&1; then
+		echo "$(date): Internet connection check FAILED" >>$LOG
+	fi
+
+	# WireGuard確認
+	if [ "{{ wireguard_enabled }}" = "true" ]; then
+		if ! ip a | grep -q wg0; then
+			echo "$(date): WireGuard interface not found, restarting" >>$LOG
+			systemctl restart wg-quick@wg0
+		elif ! ping -c 1 -W 3 10.0.0.1 >/dev/null 2>&1; then
+			echo "$(date): WireGuard peer connection FAILED, restarting" >>$LOG
+			systemctl restart wg-quick@wg0
+		fi
+	fi
+fi
+
+# DHCPリース同期 (複数ルータがある場合)
+{% if 'routers' in groups and inventory_hostname in groups['routers'] %}
+if [ -f /usr/local/bin/sync_leases.sh ]; then
+	/usr/local/bin/sync_leases.sh
+fi
+{% endif %}

@@ -1,0 +1,26 @@
+# ネットワークインターフェース設定
+auto lo
+iface lo inet loopback
+
+# 上流ルータへのWiFi接続（外部ネットワーク接続）
+auto {{ upstream_wifi_interface }}
+iface {{ upstream_wifi_interface }} inet dhcp
+    wpa-ssid {{ upstream_wifi_ssid }}
+    wpa-psk {{ upstream_wifi_password }}
+    metric 100
+
+# 内部ネットワークインターフェース（有線LAN）
+auto {{ internal_interface }}
+iface {{ internal_interface }} inet static
+{% if 'routers' in groups and inventory_hostname in groups['routers'] %}
+  address {{ internal_ip_base }}.{{ groups['routers'].index(inventory_hostname) + 10 }}/24
+{% else %}
+  address {{ internal_ip_base }}.10/24
+{% endif %}
+
+# 内部WiFiアクセスポイント用インターフェース（hostapdで管理）
+auto {{ local_wifi_interface }}
+iface {{ local_wifi_interface }} inet manual
+    pre-up ip link set $IFACE up
+    post-down ip link set $IFACE down
+    wireless-power off

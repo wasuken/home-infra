@@ -1,0 +1,30 @@
+#!/bin/bash
+# DHCPリース同期スクリプト
+
+# アクティブなルータかチェック
+if ip addr show {{ internal_interface }} | grep -q "{{ virtual_ip }}"; then
+    # アクティブルータは何もしない
+    exit 0
+fi
+
+# バックアップルータはアクティブルータからリースファイルを取得
+for host in {{ groups['routers'] | join(' ') }}; do
+    # 自分自身はスキップ
+    if [ "$host" = "{{ inventory_hostname }}" ]; then
+        continue
+    fi
+    
+    # リースファイル取得を試行
+    if ping -c 1 -W 2 $host > /dev/null 2>&1; then
+        rsync -az $host:/var/lib/misc/dnsmasq.leases /var/lib/misc/dnsmasq.leases.new
+        if [ $? -eq 0 ]; then
+            # 成功したら置き換えて終了
+            mv /var/lib/misc/dnsmasq.leases.new /var/lib/misc/dnsmasq.leases
+            logger -t dhcp-sync "DHCPリースを $host から同期しました"
+            exit 0
+        fi
+    fi
+done
+
+logger -t dhcp-sync "DHCPリースの同期に失敗しました"
+exit 1

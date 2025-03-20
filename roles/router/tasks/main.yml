@@ -1,0 +1,239 @@
+---
+# 基本パッケージインストール
+- name: Update package cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install required packages
+  apt:
+    name:
+      - hostapd
+      - dnsmasq
+      - keepalived
+      - wireguard
+      - iptables-persistent
+      - resolvconf
+      - htop
+      - iotop
+      - vnstat
+      - wireless-tools
+      - wpasupplicant
+      - iw
+      - firmware-brcm80211  # Raspberry Pi用WiFiドライバ
+    state: present
+
+# Raspberry Pi特有の最適化
+- name: Optimize Raspberry Pi
+  block:
+    - name: Configure GPU memory split
+      lineinfile:
+        path: /boot/config.txt
+        line: "gpu_mem=16"
+        regexp: "^gpu_mem="
+        state: present
+      register: gpu_config
+      
+    - name: Configure SWAP size
+      shell: |
+        if [ -f /etc/dphys-swapfile ]; then
+          sed -i 's/^CONF_SWAPSIZE=.*/CONF_SWAPSIZE={{ swap_size }}/' /etc/dphys-swapfile
+          /etc/init.d/dphys-swapfile restart
+        fi
+      register: swap_config
+      changed_when: swap_config.rc == 0
+      
+    - name: Disable unnecessary services
+      service:
+        name: "{{ item }}"
+        enabled: no
+        state: stopped
+      with_items:
+        - bluetooth
+        - avahi-daemon
+        - triggerhappy
+      failed_when: false
+      
+    - name: Apply performance governor
+      shell: echo "performance" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+      changed_when: false
+      
+  when: raspi_optimize
+
+# ネットワークインターフェース設定
+- name: Configure network interfaces
+  template:
+    src: interfaces.j2
+    dest: /etc/network/interfaces
+  notify: Restart networking
+
+# wpa_supplicant設定（上流ルータ接続用）
+- name: Configure wpa_supplicant for upstream WiFi
+  template:
+    src: wpa_supplicant.conf.j2
+    dest: /etc/wpa_supplicant/wpa_supplicant.conf
+    mode: '0600'
+  notify: Restart networking
+
+# ホスタップデーモン設定
+- name: Configure hostapd with resource limits
+  template:
+    src: "{% if raspi_optimize %}hostapd_raspi.conf.j2{% else %}hostapd.conf.j2{% endif %}"
+    dest: /etc/hostapd/hostapd.conf
+  notify: Restart hostapd
+
+- name: Enable hostapd service
+  service:
+    name: hostapd
+    enabled: yes
+  when: not ansible_check_mode
+
+# DNSMASQの設定
+- name: Configure dnsmasq with resource limits
+  template:
+    src: "{% if raspi_optimize %}dnsmasq_raspi.conf.j2{% else %}dnsmasq.conf.j2{% endif %}"
+    dest: /etc/dnsmasq.conf
+  notify: Restart dnsmasq
+
+# DHCPリース同期スクリプト
+- name: Create DHCP lease sync script
+  template:
+    src: sync_leases.sh.j2
+    dest: /usr/local/bin/sync_leases.sh
+    mode: '0755'
+  when: groups.get('routers', [])|length > 1
+
+- name: Create DHCP event handler
+  template:
+    src: dhcp-event.sh.j2
+    dest: /usr/local/bin/dhcp-event.sh
+    mode: '0755'
+  when: groups.get('routers', [])|length > 1
+
+- name: Setup lease sync cron job
+  cron:
+    name: "Sync DHCP leases"
+    job: "/usr/local/bin/sync_leases.sh"
+    minute: "*/10"
+    state: present
+  when: groups.get('routers', [])|length > 1
+
+# WireGuard設定
+- name: Generate WireGuard private key if not exists
+  shell: |
+    if [ ! -f /etc/wireguard/privatekey ]; then
+      wg genkey > /etc/wireguard/privatekey
+      chmod 600 /etc/wireguard/privatekey
+    fi
+    cat /etc/wireguard/privatekey
+  register: wg_private_key
+  changed_when: false
+  when: wireguard_enabled
+
+- name: Generate WireGuard public key
+  shell: |
+    echo "{{ wg_private_key.stdout }}" | wg pubkey > /etc/wireguard/publickey
+    cat /etc/wireguard/publickey
+  register: wg_public_key
+  changed_when: false
+  when: wireguard_enabled
+
+- name: Configure WireGuard
+  template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    mode: '0600'
+  when: wireguard_enabled
+  notify: Restart WireGuard
+
+# WireGuardハンドラスクリプト
+- name: Create WireGuard handler script
+  template:
+    src: wg_handler.sh.j2
+    dest: /etc/keepalived/wg_handler.sh
+    mode: '0755'
+  when: wireguard_enabled
+
+# 上流ルータへの接続設定
+- name: Create upstream router connection script
+  template:
+    src: setup_jcom_routing.sh.j2
+    dest: /usr/local/bin/setup_upstream_routing.sh
+    mode: '0755'
+
+- name: Ensure upstream router connection script runs at boot
+  lineinfile:
+    path: /etc/rc.local
+    line: "/usr/local/bin/setup_upstream_routing.sh"
+    insertbefore: "exit 0"
+    state: present
+    create: yes
+    mode: '0755'
+
+# VRRP/keepalived設定（ノード数に応じた設定）
+- name: Check number of routers
+  set_fact:
+    router_count: "{{ groups.get('routers', []) | length | int }}"
+
+- name: Configure keepalived - Single Router Mode
+  template:
+    src: keepalived_single.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+  when: not ansible_check_mode and router_count|int == 1
+  notify: Restart keepalived
+
+- name: Configure keepalived - Multiple Routers Mode
+  template:
+    src: keepalived_multi.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+  when: not ansible_check_mode and router_count|int > 1
+  notify: Restart keepalived
+
+# モニタリングスクリプト
+- name: Create service monitoring script
+  template:
+    src: monitor_services.sh.j2
+    dest: /usr/local/bin/monitor_services.sh
+    mode: '0755'
+
+- name: Create monitor handler script
+  template:
+    src: monitor_handler.sh.j2
+    dest: /usr/local/bin/monitor_handler.sh
+    mode: '0755'
+
+- name: Create resource monitoring script
+  template:
+    src: monitor_resources.sh.j2
+    dest: /usr/local/bin/monitor_resources.sh
+    mode: '0755'
+
+- name: Add service monitoring to crontab
+  cron:
+    name: "Monitor router services"
+    job: "/usr/local/bin/monitor_services.sh"
+    minute: "*/5"
+    state: present
+
+- name: Add resource monitoring to crontab
+  cron:
+    name: "Monitor Raspberry Pi resources"
+    job: "/usr/local/bin/monitor_resources.sh"
+    minute: "*/15"
+    state: present
+
+# IP転送の有効化
+- name: Enable IP forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: 1
+    state: present
+    reload: yes
+  when: not ansible_check_mode
+
+# ファイアウォール設定
+- name: Configure firewall rules
+  template:
+    src: iptables-rules.j2
+    dest: /etc/iptables/rules.v4
+  notify: Apply iptables rules

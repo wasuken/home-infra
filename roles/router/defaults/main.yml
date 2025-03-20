@@ -1,0 +1,33 @@
+---
+# ネットワークインターフェース設定
+upstream_wifi_interface: "wlan1"  # 上流ルータへのWiFi接続用
+internal_interface: "eth0"        # 内部ネットワーク用有線LANインターフェース
+local_wifi_interface: "wlan0"     # 内部WiFi AP用インターフェース
+
+# ネットワーク設定
+virtual_ip: "192.168.20.1"         # 仮想IP
+virtual_router_id: 51             # VRRPルータID
+internal_ip_base: "192.168.20"     # 内部ネットワークの基本アドレス
+dhcp_range_start: "192.168.20.100" # DHCP開始アドレス
+dhcp_range_end: "192.168.20.200"   # DHCP終了アドレス
+
+# 上流ルータのWiFi接続情報
+upstream_wifi_ssid: ""        # 上流ルータのSSID
+upstream_wifi_password: "" # 上流ルータのパスワード
+upstream_router_ip: "192.168.0.1"          # 上流ルータのIPアドレス
+
+# 内部WiFi AP設定
+wifi_ssid: "archwifi-next"     # 内部WiFiのSSID
+wifi_password: "dxyZcox244a" # 内部WiFiのパスワード
+wifi_country_code: "JP"           # WiFi国別コード（日本）
+
+# WireGuard設定
+wireguard_enabled: true           # WireGuard有効化フラグ
+wireguard_server_endpoint: "153.127.14.32:51820" # WireGuardサーバーのエンドポイント
+wireguard_server_pubkey: "H6401eqWTQECM4WQD5+5sx9i0zQGhhHTnZcojA5AyUI=" # WireGuardサーバーの公開鍵
+
+# Raspberry Pi最適化設定
+raspi_optimize: true              # Raspberry Pi最適化フラグ
+swap_size: 1024                   # スワップサイズ(MB)
+dnsmasq_cache_size: 1000          # DNSキャッシュサイズ制限
+hostapd_max_connections: 15       # WiFi最大接続数

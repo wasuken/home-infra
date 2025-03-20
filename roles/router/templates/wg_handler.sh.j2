@@ -1,0 +1,27 @@
+#!/bin/bash
+# WireGuardフェイルオーバーハンドラ
+
+log() {
+    logger -t wireguard-handler "$1"
+    echo "$(date): $1" >> /var/log/wireguard-failover.log
+}
+
+case $1 in
+  master)
+    log "This router became MASTER, starting WireGuard"
+    systemctl start wg-quick@wg0
+    # デフォルトルートをWireGuardインターフェースに設定
+    ip route add default dev wg0 table 200
+    ip rule add fwmark 200 table 200
+    # 上流ルータへの接続を設定
+    /usr/local/bin/setup_upstream_routing.sh
+    ;;
+  backup)
+    log "This router became BACKUP, stopping WireGuard"
+    systemctl stop wg-quick@wg0
+    ;;
+  fault)
+    log "This router is in FAULT state, stopping WireGuard"
+    systemctl stop wg-quick@wg0
+    ;;
+esac

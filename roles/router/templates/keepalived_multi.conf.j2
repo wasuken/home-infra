@@ -1,0 +1,27 @@
+# 複数ルータ構成用keepalived設定
+vrrp_script chk_services {
+    script "/usr/local/bin/monitor_handler.sh check"
+    interval 2
+    weight 2
+}
+
+vrrp_instance VI_1 {
+    # インベントリの最初のホストをMASTERに、それ以外をBACKUPに
+    state {% if inventory_hostname == groups.get('routers', [])[0] %}MASTER{% else %}BACKUP{% endif %}
+    interface {{ internal_interface }}
+    virtual_router_id {{ virtual_router_id }}
+    # 優先度を調整（最初のホストが最も高く、順に下げる）
+    priority {{ 100 - groups['routers'].index(inventory_hostname) * 10 }}
+    advert_int 1
+    virtual_ipaddress {
+        {{ virtual_ip }}/24
+    }
+    track_script {
+        chk_services
+    }
+    {% if wireguard_enabled %}
+    notify_master "/etc/keepalived/wg_handler.sh master"
+    notify_backup "/etc/keepalived/wg_handler.sh backup"
+    notify_fault "/etc/keepalived/wg_handler.sh fault"
+    {% endif %}
+}

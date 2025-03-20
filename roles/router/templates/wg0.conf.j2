@@ -1,0 +1,10 @@
+[Interface]
+PrivateKey = {{ wg_private_key.stdout }}
+Address = 10.0.0.{{ groups.get('routers', []).index(inventory_hostname) + 2 }}/24
+ListenPort = 51820
+
+[Peer]
+PublicKey = {{ wireguard_server_pubkey }}
+Endpoint = {{ wireguard_server_endpoint }}
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25

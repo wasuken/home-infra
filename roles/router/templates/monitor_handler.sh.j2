@@ -1,0 +1,65 @@
+#!/bin/bash
+# keepalivedからのサービス監視ハンドラ
+
+# 引数処理
+ACTION="$1"
+
+if [ "$ACTION" = "check" ]; then
+	# サービスの状態をチェック
+	SERVICES_OK=0
+
+	# hostapd確認
+	if pgrep hostapd >/dev/null; then
+		HOSTAPD_OK=1
+	else
+		HOSTAPD_OK=0
+		logger -t keepalived-check "hostapd is not running"
+	fi
+
+	# dnsmasq確認
+	if pgrep dnsmasq >/dev/null; then
+		DNSMASQ_OK=1
+	else
+		DNSMASQ_OK=0
+		logger -t keepalived-check "dnsmasq is not running"
+	fi
+
+	# 上流ルータ接続確認
+	if ping -c 1 -W 2 {{ upstream_router_ip }} >/dev/null 2>&1; then
+		UPSTREAM_OK=1
+	else
+		UPSTREAM_OK=0
+		logger -t keepalived-check "Cannot reach upstream router"
+	fi
+
+	# インターネット接続確認
+	if ping -c 1 -W 5 8.8.8.8 >/dev/null 2>&1; then
+		INTERNET_OK=1
+	else
+		INTERNET_OK=0
+		logger -t keepalived-check "Internet connection check failed"
+	fi
+
+	# WireGuard確認（有効な場合のみ）
+	if [ "{{ wireguard_enabled }}" = "true" ]; then
+		if ip a | grep -q wg0 && ping -c 1 -W 3 10.0.0.1 >/dev/null 2>&1; then
+			WG_OK=1
+		else
+			WG_OK=0
+			logger -t keepalived-check "WireGuard connection check failed"
+		fi
+	else
+		# WireGuardが無効な場合は常にOK
+		WG_OK=1
+	fi
+
+	# 総合判定（すべてのサービスが正常であることを確認）
+	if [ $HOSTAPD_OK -eq 1 ] && [ $DNSMASQ_OK -eq 1 ] && [ $UPSTREAM_OK -eq 1 ] && [ $INTERNET_OK -eq 1 ] && [ $WG_OK -eq 1 ]; then
+		SERVICES_OK=1
+	fi
+
+	# 監視結果を返す（0=成功、1=失敗）
+	exit $((1 - $SERVICES_OK))
+fi
+
+exit 0

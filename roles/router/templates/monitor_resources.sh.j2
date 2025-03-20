@@ -1,0 +1,63 @@
+#!/bin/bash
+# Raspberry Pi リソースモニタリングスクリプト
+
+LOG="/var/log/raspi-resources.log"
+DATE=$(date '+%Y-%m-%d %H:%M:%S')
+HOSTNAME=$(hostname)
+
+# メモリ使用状況
+MEM_TOTAL=$(free -m | awk '/^Mem:/{print $2}')
+MEM_USED=$(free -m | awk '/^Mem:/{print $3}')
+MEM_FREE=$(free -m | awk '/^Mem:/{print $4}')
+MEM_PERCENTAGE=$((MEM_USED * 100 / MEM_TOTAL))
+
+# CPU使用率
+CPU=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
+
+# 温度
+TEMP=$(vcgencmd measure_temp | cut -d= -f2 | cut -d"'" -f1)
+
+# ディスク使用率
+DISK_USAGE=$(df -h / | awk '/\// {print $5}' | sed 's/%//')
+
+# ロードアベレージ
+LOAD=$(cat /proc/loadavg | awk '{print $1}')
+
+# サービス状態確認
+HOSTAPD_STATUS=$(systemctl is-active hostapd)
+DNSMASQ_STATUS=$(systemctl is-active dnsmasq)
+KEEPALIVED_STATUS=$(systemctl is-active keepalived)
+WG_STATUS=$(systemctl is-active wg-quick@wg0 || echo "inactive")
+
+# ログ出力
+echo "$DATE - $HOSTNAME - MEM: ${MEM_PERCENTAGE}% (${MEM_USED}/${MEM_TOTAL}MB) CPU: ${CPU}% TEMP: ${TEMP}°C DISK: ${DISK_USAGE}% LOAD: $LOAD" >> $LOG
+echo "$DATE - $HOSTNAME - SERVICES: hostapd=$HOSTAPD_STATUS dnsmasq=$DNSMASQ_STATUS keepalived=$KEEPALIVED_STATUS wireguard=$WG_STATUS" >> $LOG
+
+# 警告条件チェック
+if [ $MEM_PERCENTAGE -gt 90 ]; then
+    logger -t raspi-monitor "警告: メモリ使用率が90%を超えています: ${MEM_PERCENTAGE}%"
+fi
+
+if [ $(echo "$TEMP > 75" | bc -l) -eq 1 ]; then
+    logger -t raspi-monitor "警告: CPU温度が高すぎます: ${TEMP}°C"
+fi
+
+if [ $(echo "$LOAD > 3.5" | bc -l) -eq 1 ]; then
+    logger -t raspi-monitor "警告: システム負荷が高すぎます: $LOAD"
+fi
+
+# 結果をCSVファイルに保存（グラフ化などのために）
+echo "$DATE,$MEM_PERCENTAGE,$CPU,$TEMP,$DISK_USAGE,$LOAD" >> /var/log/raspi-metrics.csv
+
+# ファイルサイズの制限
+if [ $(stat -c%s "/var/log/raspi-metrics.csv") -gt 10485760 ]; then  # 10MB超過
+    tail -n 5000 /var/log/raspi-metrics.csv > /var/log/raspi-metrics.csv.new
+    mv /var/log/raspi-metrics.csv.new /var/log/raspi-metrics.csv
+fi
+
+# 利用可能な無線ネットワークのスキャン結果を記録（デバッグ用）
+if [ "{{ upstream_wifi_interface }}" != "" ]; then
+    iwlist {{ upstream_wifi_interface }} scan | grep -E "ESSID|Signal|Quality" > /var/log/wifi-scan-$(date +%Y%m%d-%H%M).log
+    # 古いスキャン結果は削除
+    find /var/log/ -name "wifi-scan-*.log" -mtime +7 -delete
+fi

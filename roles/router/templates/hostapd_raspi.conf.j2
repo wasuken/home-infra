@@ -1,0 +1,19 @@
+interface={{ local_wifi_interface }}
+driver=nl80211
+ssid={{ wifi_ssid }}
+hw_mode=g
+channel=7
+wmm_enabled=1
+auth_algs=1
+wpa=2
+wpa_passphrase={{ wifi_password }}
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+
+# Raspberry Pi 3向け最適化
+max_num_sta={{ hostapd_max_connections }}
+rts_threshold=2347
+fragm_threshold=2346
+# ビーコン間隔を長くして CPU 使用率を下げる
+beacon_int=200

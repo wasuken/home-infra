@@ -1,0 +1,22 @@
+# DNSMasq基本設定
+interface={{ internal_interface }},{{ local_wifi_interface }}
+bind-interfaces
+domain-needed
+bogus-priv
+
+# DHCP設定
+dhcp-range={{ dhcp_range_start }},{{ dhcp_range_end }},12h
+dhcp-option=option:router,{{ virtual_ip }}
+dhcp-option=option:dns-server,{{ virtual_ip }}
+
+# DNSサーバ設定
+server=8.8.8.8
+server=8.8.4.4
+
+# DHCPリースファイルパス
+dhcp-leasefile=/var/lib/misc/dnsmasq.leases
+
+# DHCPリース付与時のスクリプト実行（複数ルータ構成時）
+{% if 'routers' in groups and inventory_hostname in groups['routers'] %}
+dhcp-script=/usr/local/bin/dhcp-event.sh
+{% endif %}
